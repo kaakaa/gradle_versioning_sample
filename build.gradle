@@ -1,0 +1,63 @@
+import org.kaakaa.gia.ProjectVersion
+import org.kaakaa.gia.ReleaseVersionTask
+
+apply plugin: 'groovy'
+
+ext.versionFile = file('version.properties')
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile 'org.slf4j:slf4j-api:1.7.5'
+    testCompile 'junit:junit:4.11'
+}
+
+task showVersion << {
+	logger.quiet project.version.toString()
+}
+
+task loadVersion {
+	project.version = readVersion()
+}
+
+ProjectVersion readVersion() {
+	logger.quiet 'Reading the version file.'
+
+	if(!versionFile.exists()) {
+		throw new GradleException("Required version file does not exist: $versionFile.canonicalPath")
+	}
+
+	Properties versionProps = new Properties()
+
+	versionFile.withInputStream { stream ->
+		versionProps.load(stream)
+	}
+
+	new ProjectVersion(versionProps.major.toInteger(), versionProps.minor.toInteger(), versionProps.release.toBoolean())
+}
+
+tasks.addRule("Pattern: increment<Classifier>Version - Increments the project version classifier.") { String taskName ->
+	if(taskName.startsWith('increment') && taskName.endsWith('Version')) {
+		task(taskName) << {
+			String classifier = (taskName - 'increment' - 'Version').toLowerCase()
+			String currentVersion = version.toString()
+
+			switch(classifier) {
+				case 'major': ++version.major
+											break
+				case 'mainor': ++version.minor
+											break
+				default: throw new GradleException("Invalid version type $classifier. Allowed types: ['Major', 'Minor']")
+			}
+
+			String newVersion = version.toString()
+			logger.info "Incrementing $classifier project version: $currentVersion -> $newVersion"
+
+			ant.propertyfile(file: versionFile) {
+				entry(key: classifier, type: 'int', operation: '+', value: 1)
+			}
+		}
+	}
+}
